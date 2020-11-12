@@ -98,7 +98,7 @@ pipeline {
             steps {
                 sh 'echo "Should be restaring here..."'
                 sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} export ${buildInstance.PATH} pm2 stop ${buildInstance.deployedPm2Path}"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\"${buildInstance.PATH}\" pm2 stop ${buildInstance.deployedPm2Path})'"
                 }
             }
         }

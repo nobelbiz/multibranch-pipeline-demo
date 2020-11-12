@@ -1,0 +1,12 @@
+{
+  "apps": [
+    {
+      "name"        : "jenkins-demo",
+      "script"      : "app.js",
+      "error_file"  : "logs/jenkins-demo.log",
+      "out_file"    : "logs/jenkins-demo.log",
+      "watch"       : false,
+      "combine_logs": true
+    }
+  ]
+}
