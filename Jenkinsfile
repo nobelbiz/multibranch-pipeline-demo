@@ -29,7 +29,7 @@ def getBuildInstance(variables) {
 
         def computedVars = [
             "repoName"                      : repoName,
-            "deployServer"                  : environments[env.BRANCH_NAME]['deployServer'],
+            "deployServer"                  : "${environments[env.BRANCH_NAME]['deployServer']}",
             "deployableBuildName"           : deployableBuildName,
             "deployPathBase"                : deployPathBase,
             "deployPathReleases"            : deployPathReleases,
