@@ -76,19 +76,16 @@ pipeline {
             }
             steps {
                 script {
-                    String user = buildInstance.deployUser
-                    String server = environments[env.BRANCH_NAME]['deployServer']
-
                     sshagent(buildInstance.deployKeys) {
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
-                        sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.deployUser}@${buildInstance.server}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} tar xzvf ${buildInstance.deployedCompressedWorspacePath} -C ${buildInstance.deployedReleasePath}" // extract the build into the releases folder
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} rm -f ${buildInstance.deployPathBase}/last_release" // remove the last_release reference before making a new one
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} mv ${buildInstance.deployPathCurrent} ${buildInstance.deployPathBase}/last_release" // keep a reference of the last release (fail silently)
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} ln -s ${buildInstance.deployedReleasePath} ${buildInstance.deployPathCurrent}" // make the last deployed release the current one
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} ln -s ${buildInstance.deployPathShared}/logs ${buildInstance.deployedReleasePath}" // create logs link into the newest release
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} '(ls -d ${buildInstance.deployPathReleases}/*|head -n -${buildInstance.releasesToKeep})|xargs --no-run-if-empty rm -rf'" // remove old releases
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
+                        sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.deployUser}@${buildInstance.deployServer}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} tar xzvf ${buildInstance.deployedCompressedWorspacePath} -C ${buildInstance.deployedReleasePath}" // extract the build into the releases folder
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} rm -f ${buildInstance.deployPathBase}/last_release" // remove the last_release reference before making a new one
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} mv ${buildInstance.deployPathCurrent} ${buildInstance.deployPathBase}/last_release" // keep a reference of the last release (fail silently)
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} ln -s ${buildInstance.deployedReleasePath} ${buildInstance.deployPathCurrent}" // make the last deployed release the current one
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} ln -s ${buildInstance.deployPathShared}/logs ${buildInstance.deployedReleasePath}" // create logs link into the newest release
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(ls -d ${buildInstance.deployPathReleases}/*|head -n -${buildInstance.releasesToKeep})|xargs --no-run-if-empty rm -rf'" // remove old releases
                     }
                 }
             }
@@ -100,7 +97,7 @@ pipeline {
             steps {
                 sh 'echo "Should be restaring here..."'
                 sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.server} pm2 stop ${buildInstance.deployedPm2Path}"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} pm2 stop ${buildInstance.deployedPm2Path}"
                 }
             }
         }
