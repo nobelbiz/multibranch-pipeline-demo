@@ -47,6 +47,7 @@ pipeline {
                 sh """
                 echo "Running Code Analysis"
                 """
+                print "${currentBuild.getBuildCauses()[0].shortDescription}"
             }
         }
 
