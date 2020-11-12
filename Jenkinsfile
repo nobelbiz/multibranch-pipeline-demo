@@ -1,5 +1,6 @@
 def defaults = [
     "deployUser"    : "deploy",
+    "PATH"          : "/home/deploy/.nvm/versions/node/v12.16.1/bin:/usr/local/bin:/usr/bin:/bin",
     "deployKeys"    : ['deploy_2018_production', 'deploy_2018_staging'],
     "releasesToKeep": 5,
 ]
@@ -97,7 +98,7 @@ pipeline {
             steps {
                 sh 'echo "Should be restaring here..."'
                 sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} pm2 stop ${buildInstance.deployedPm2Path}"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} export ${buildInstance.PATH} pm2 stop ${buildInstance.deployedPm2Path}"
                 }
             }
         }
