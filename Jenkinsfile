@@ -53,7 +53,7 @@ pipeline {
 
         stage('Build Deploy Code') {
             when {
-                branch 'develop'
+                expression { currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user') || env.BRANCH_NAME != 'master' }
             }
             steps {
                 sh """
