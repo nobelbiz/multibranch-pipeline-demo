@@ -1,70 +1,108 @@
+def defaults = [
+    "deployUser"    : "deploy",
+    "deployKeys"    : ['deploy_2018_production', 'deploy_2018_staging'],
+    "releasesToKeep": 5,
+]
+
+def environments = [
+    "staging": [
+        "deployServer": "193.200.242.59"
+    ],
+    "master": [
+        "deployServer": "193.200.242.58"
+    ]
+]
+
+/***********************************************************/
+def getBuildInstance(variables) {
+    if (variables.containsKey('deployableBuildName')) {
+        print "Vars already set"
+    } else {
+        print "Setting up instance variables"
+
+        String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
+        String deployPathBase       = "/home/deploy/apps/${repoName}"
+        String deployableBuildName  = sh(returnStdout: true, script: 'date "+%Y-%m-%d_%H-%M-%S"').trim()
+        String deployPathReleases   = "${deployPathBase}/releases"
+        String deployPathCurrent    = "${deployPathBase}/current"
+        String deployedReleasePath  = "${deployPathReleases}/${deployableBuildName}"
+
+        def computedVars = [
+            "repoName"                      : repoName,
+            "deployServer"                  : environments[env.BRANCH_NAME]['deployServer'],
+            "deployableBuildName"           : deployableBuildName,
+            "deployPathBase"                : deployPathBase,
+            "deployPathReleases"            : deployPathReleases,
+            "deployPathCurrent"             : deployPathCurrent,
+            "deployedReleasePath"           : deployedReleasePath,
+            "deployPathShared"              : "${deployPathBase}/shared",
+            "compressedWorspacePath"        : "${env.WORKSPACE_TMP}/${deployableBuildName}.tar.gz",
+            "deployedCompressedWorspacePath": "${deployedReleasePath}/${deployableBuildName}.tar.gz",
+            "deployedPm2Path"               : "${deployedReleasePath}/pm2.${env.BRANCH_NAME}.json",
+            "wasTriggeredByUser"            : currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user')
+
+        ]
+        variables = variables << computedVars
+    }
+
+    return variables
+}
+
+def buildInstance // Global variable declaration
+/***********************************************************/
+
+
 pipeline {
-
-    agent {
-        node {
-            label 'master'
-        }
-    }
-
-    options {
-        buildDiscarder logRotator( 
-                    daysToKeepStr: '16', 
-                    numToKeepStr: '10'
-            )
-    }
-
+    agent any
     stages {
-        
-        stage('Cleanup Workspace') {
+        stage('Build') {
             steps {
-                cleanWs()
-                sh """
-                echo "Cleaned Up Workspace For Project"
-                """
+                script {
+                    buildInstance = getBuildInstance(defaults)
+                    sh 'rm -rf .node_modules'
+                    sh 'npm i'
+                    sh "tar czvf ${buildInstance.compressedWorspacePath} -C ${env.WORKSPACE} ." // compress the build to deploy faster
+                }
             }
         }
-
-        stage('Code Checkout') {
+        stage('Test') {
             steps {
-                checkout([
-                    $class: 'GitSCM', 
-                    branches: [[name: '*/main']], 
-                    userRemoteConfigs: [[url: 'https://github.com/spring-projects/spring-petclinic.git']]
-                ])
+                sh 'echo "Should be testing here..."'
             }
         }
-
-        stage(' Unit Testing') {
-            steps {
-                sh """
-                echo "Running Unit Tests"
-                """
-            }
-        }
-
-        stage('Code Analysis') {
-            steps {
-                sh """
-                echo "Running Code Analysis"
-                """
-                print "${currentBuild.getBuildCauses()}"
-            }
-        }
-
-        stage('Build Deploy Code') {
+        stage('Deploy') {
             when {
-                expression { currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user') || env.BRANCH_NAME != 'master' }
+                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
             }
             steps {
-                sh """
-                echo "Building Artifact"
-                """
+                script {
+                    String user = buildInstance.deployUser
+                    String server = environments[env.BRANCH_NAME]['deployServer']
 
-                sh """
-                echo "Deploying Code"
-                """
+                    sshagent(buildInstance.deployKeys) {
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
+                        sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.deployUser}@${buildInstance.server}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} tar xzvf ${buildInstance.deployedCompressedWorspacePath} -C ${buildInstance.deployedReleasePath}" // extract the build into the releases folder
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} rm -f ${buildInstance.deployPathBase}/last_release" // remove the last_release reference before making a new one
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} mv ${buildInstance.deployPathCurrent} ${buildInstance.deployPathBase}/last_release" // keep a reference of the last release (fail silently)
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} ln -s ${buildInstance.deployedReleasePath} ${buildInstance.deployPathCurrent}" // make the last deployed release the current one
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} ln -s ${buildInstance.deployPathShared}/logs ${buildInstance.deployedReleasePath}" // create logs link into the newest release
+                        sh "ssh ${buildInstance.deployUser}@${buildInstance.server} '(ls -d ${buildInstance.deployPathReleases}/*|head -n -${buildInstance.releasesToKeep})|xargs --no-run-if-empty rm -rf'" // remove old releases
+                    }
+                }
             }
         }
-
-    }   
+        stage('Restart') {
+            when {
+                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
+            }
+            steps {
+                sh 'echo "Should be restaring here..."'
+                sshagent(buildInstance.deployKeys) {
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.server} pm2 stop ${buildInstance.deployedPm2Path}"
+                }
+            }
+        }
+    }
 }
