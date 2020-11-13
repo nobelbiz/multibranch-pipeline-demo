@@ -1,6 +1,5 @@
 def defaults = [
     "deployUser"    : "deploy",
-    "PATH"          : "/home/deploy/.nvm/versions/node/v12.16.1/bin:/usr/local/bin:/usr/bin:/bin",
     "deployKeys"    : ['deploy_2018_production', 'deploy_2018_staging'],
     "releasesToKeep": 5,
 ]
@@ -22,7 +21,8 @@ def getBuildInstance(variables, environments) {
         print "Setting up instance variables"
 
         String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
-        String deployPathBase       = "/home/deploy/apps/${repoName}"
+        String homePath             = "/home/${variables.deployUser}"
+        String deployPathBase       = "${homePath}/apps/${repoName}"
         String deployableBuildName  = sh(returnStdout: true, script: 'date "+%Y-%m-%d_%H-%M-%S"').trim()
         String deployPathReleases   = "${deployPathBase}/releases"
         String deployPathCurrent    = "${deployPathBase}/current"
@@ -30,6 +30,7 @@ def getBuildInstance(variables, environments) {
 
         def computedVars = [
             "repoName"                      : repoName,
+            "homePath"                      : homePath,
             "deployServer"                  : environments[env.BRANCH_NAME]['deployServer'],
             "deployableBuildName"           : deployableBuildName,
             "deployPathBase"                : deployPathBase,
@@ -39,7 +40,7 @@ def getBuildInstance(variables, environments) {
             "deployPathShared"              : "${deployPathBase}/shared",
             "compressedWorspacePath"        : "${env.WORKSPACE_TMP}/${deployableBuildName}.tar.gz",
             "deployedCompressedWorspacePath": "${deployedReleasePath}/${deployableBuildName}.tar.gz",
-            "deployedPm2Path"               : "${deployedReleasePath}/pm2.${env.BRANCH_NAME}.json",
+            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${env.BRANCH_NAME}.json",
             "wasTriggeredByUser"            : currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user')
 
         ]
@@ -98,7 +99,7 @@ pipeline {
             steps {
                 sh 'echo "Should be restaring here..."'
                 sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\"${buildInstance.PATH}\" pm2 stop ${buildInstance.deployedPm2Path})'"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 stop ${buildInstance.deployedPm2FilePath})'"
                 }
             }
         }
