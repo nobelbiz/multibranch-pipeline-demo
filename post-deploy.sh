@@ -1,1 +1,1 @@
-touch /home/deploy/apps/mutibranch-pipeline-demo/touched-text
+touch /home/deploy/apps/multibranch-pipeline-demo/touched-text
