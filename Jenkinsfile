@@ -69,7 +69,7 @@ pipeline {
         }
         stage('Test') {
             steps {
-                sh 'echo "Should be testing here..."'
+                sh 'echo "Should be testing here... =/"'
             }
         }
         stage('Deploy') {
@@ -97,9 +97,9 @@ pipeline {
                 expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
             }
             steps {
-                sh 'echo "Should be restaring here..."'
                 sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 stop ${buildInstance.deployedPm2FilePath})'"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 delete ${buildInstance.deployedPm2FilePath})'"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && cd ${buildInstance.deployedReleasePath} && pm2 start ${buildInstance.deployedPm2FilePath})'"
                 }
             }
         }
