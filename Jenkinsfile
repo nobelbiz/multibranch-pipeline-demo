@@ -70,6 +70,7 @@ pipeline {
         stage('Test') {
             steps {
                 sh 'echo "Should be testing here..."'
+                print currentBuild.getBuildCauses()[0].shortDescription
             }
         }
         stage('Deploy') {
