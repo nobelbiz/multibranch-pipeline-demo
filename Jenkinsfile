@@ -1,15 +1,16 @@
 def defaults = [
     "deployUser"    : "deploy",
-    "deployKeys"    : ['deploy_2018_production', 'deploy_2018_staging'],
     "releasesToKeep": 5,
 ]
 
 def environments = [
     "staging": [
-        "deployServer": "193.200.242.59"
+        "deployServer"  : "193.200.242.59",
+        "deployKey"     : "deploy_2018_production",
     ],
     "master": [
-        "deployServer": "193.200.242.58"
+        "deployServer"  : "193.200.242.58",
+        "deployKey"     : "deploy_2018_production"
     ]
 ]
 
@@ -32,6 +33,7 @@ def getBuildInstance(variables, environments) {
             "repoName"                      : repoName,
             "homePath"                      : homePath,
             "deployServer"                  : environments[env.BRANCH_NAME]['deployServer'],
+            "deployKey"                     : environments[env.BRANCH_NAME]['deployKey'],
             "deployableBuildName"           : deployableBuildName,
             "deployPathBase"                : deployPathBase,
             "deployPathReleases"            : deployPathReleases,
@@ -69,8 +71,7 @@ pipeline {
         }
         stage('Test') {
             steps {
-                sh 'echo "Should be testing here..."'
-                print currentBuild.getBuildCauses()[0].shortDescription
+                sh 'echo "Should be testing here... =/"'
             }
         }
         stage('Deploy') {
@@ -79,7 +80,7 @@ pipeline {
             }
             steps {
                 script {
-                    sshagent(buildInstance.deployKeys) {
+                    sshagent([buildInstance.deployKey]) {
                         sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
                         sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
                         sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.deployUser}@${buildInstance.deployServer}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
@@ -98,9 +99,19 @@ pipeline {
                 expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
             }
             steps {
-                sh 'echo "Should be restaring here..."'
-                sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 stop ${buildInstance.deployedPm2FilePath})'"
+                sshagent([buildInstance.deployKey]) {
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 delete ${buildInstance.deployedPm2FilePath})'"
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && cd ${buildInstance.deployedReleasePath} && pm2 start ${buildInstance.deployedPm2FilePath})'"
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Succeeded!'
+            script {
+                sshagent([buildInstance.deployKey]) {
+                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '([ -f ${buildInstance.deployedReleasePath}/post-deploy.sh ] && ${buildInstance.deployedReleasePath}/post-deploy.sh)'"
                 }
             }
         }
