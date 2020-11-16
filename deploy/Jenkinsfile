@@ -115,7 +115,7 @@ pipeline {
             }
             steps {
                 sshagent([buildInstance.deployKey]) {
-                    sh "ssh ${buildInstance.sshString} '([ -f ${buildInstance.postDeployFolder}/post-deploy.sh ] && ${buildInstance.postDeployFolder}/post-deploy.sh'"
+                    sh "ssh ${buildInstance.sshString} '([ -f ${buildInstance.postDeployFolder}/post-deploy.sh ] && ${buildInstance.postDeployFolder}/post-deploy.sh)'"
                 }
             }
         }
