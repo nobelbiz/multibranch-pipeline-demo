@@ -24,6 +24,9 @@ def getBuildInstance(variables, environments, deploy_branch) {
         print "Vars already set"
     } else {
         print "Setting up instance variables"
+        print "=========================== = ============================="
+        print currentBuild.getBuildCauses()[0].shortDescription
+        print "=========================== = ============================="
 
         String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
         String deployServer         = environments[deploy_branch]['deployServer']
