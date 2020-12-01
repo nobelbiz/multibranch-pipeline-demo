@@ -19,7 +19,7 @@ def environments = [
 ]
 
 /***********************************************************/
-def getBuildInstance(variables, environments) {
+def getBuildInstance(variables, environments, deploy_branch) {
     if (variables.containsKey('deployableBuildName')) {
         print "Vars already set"
     } else {
@@ -73,7 +73,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    buildInstance = getBuildInstance(defaults, environments)
+                    buildInstance = getBuildInstance(defaults, environments, deploy_branch)
                     sh 'rm -rf .node_modules'
                     sh 'npm i'
                     sh "tar czvf ${buildInstance.compressedWorspacePath} -C ${env.WORKSPACE} ." // compress the build to deploy faster
