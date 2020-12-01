@@ -27,7 +27,7 @@ def getBuildInstance(variables, environments, deployBranch) {
         print "Setting up instance variables"
 
         String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
-        String deployEnv            = environments.hasProperty(deployBranch) ? environments[deployBranch]['deployServer'] : environments[variables.defaultEnv]['deployServer']
+        String deployEnv            = environments.containsKey(deployBranch) ? deployBranch : variables.defaultEnv
         String deployServer         = environments[deployEnv]['deployServer']
         String homePath             = "/home/${variables.deployUser}"
         String deployPathBase       = "${homePath}/apps/${repoName}"
