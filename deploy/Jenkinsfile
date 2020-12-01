@@ -1,6 +1,10 @@
+// NOT TO BE USED WITH REACT
+// Jenkinsfile HLRMNP - To be used only with node based projects
+// v1.0
+
 def defaults = [
     "deployUser"    : "deploy",
-    "releasesToKeep": 5,
+    "releasesToKeep": 5
 ]
 
 def environments = [
@@ -15,14 +19,14 @@ def environments = [
 ]
 
 /***********************************************************/
-def getBuildInstance(variables, environments) {
+def getBuildInstance(variables, environments, deploy_branch) {
     if (variables.containsKey('deployableBuildName')) {
         print "Vars already set"
     } else {
         print "Setting up instance variables"
 
         String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
-        String deployServer         = environments[env.BRANCH_NAME]['deployServer']
+        String deployServer         = environments[deploy_branch]['deployServer']
         String homePath             = "/home/${variables.deployUser}"
         String deployPathBase       = "${homePath}/apps/${repoName}"
         String deployableBuildName  = sh(returnStdout: true, script: 'date "+%Y-%m-%d_%H-%M-%S"').trim()
@@ -35,7 +39,7 @@ def getBuildInstance(variables, environments) {
             "homePath"                      : homePath,
             "deployServer"                  : deployServer,
             "sshString"                     : "${variables.deployUser}@${deployServer}",
-            "deployKey"                     : environments[env.BRANCH_NAME]['deployKey'],
+            "deployKey"                     : environments[deploy_branch]['deployKey'],
             "deployableBuildName"           : deployableBuildName,
             "deployPathBase"                : deployPathBase,
             "deployPathReleases"            : deployPathReleases,
@@ -44,7 +48,7 @@ def getBuildInstance(variables, environments) {
             "deployPathShared"              : "${deployPathBase}/shared",
             "compressedWorspacePath"        : "${env.WORKSPACE_TMP}/${deployableBuildName}.tar.gz",
             "deployedCompressedWorspacePath": "${deployedReleasePath}/${deployableBuildName}.tar.gz",
-            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${env.BRANCH_NAME}.json",
+            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${deploy_branch}.json",
             "wasTriggeredByUser"            : currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user'),
             "postDeployFolder"              : "${deployedReleasePath}/deploy",
             "nodeCurrentPath"               : "/home/${variables.deployUser}/.nvm/current/bin/"
@@ -62,11 +66,14 @@ def buildInstance // Global variable declaration
 
 pipeline {
     agent any
+    parameters {
+        string(name: 'deploy_branch', defaultValue: env.BRANCH_NAME, description: '')
+    }
     stages {
         stage('Build') {
             steps {
                 script {
-                    buildInstance = getBuildInstance(defaults, environments)
+                    buildInstance = getBuildInstance(defaults, environments, deploy_branch)
                     sh 'rm -rf .node_modules'
                     sh 'npm i'
                     sh "tar czvf ${buildInstance.compressedWorspacePath} -C ${env.WORKSPACE} ." // compress the build to deploy faster
@@ -80,7 +87,7 @@ pipeline {
         }
         stage('Deploy') {
             when {
-                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
             }
             steps {
                 script {
@@ -100,7 +107,7 @@ pipeline {
         }
         stage('Restart') {
             when {
-                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
             }
             steps {
                 sshagent([buildInstance.deployKey]) {
@@ -109,15 +116,15 @@ pipeline {
                 }
             }
         }
-        stage('Post-deploy') {
-            when {
-                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
-            }
-            steps {
-                sshagent([buildInstance.deployKey]) {
-                    sh "ssh ${buildInstance.sshString} '([ -f ${buildInstance.postDeployFolder}/post-deploy.sh ] && ${buildInstance.postDeployFolder}/post-deploy.sh)'"
-                }
-            }
-        }
+        // stage('Post-deploy') { // Uncomment once needed
+        //     when {
+        //         expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
+        //     }
+        //     steps {
+        //         sshagent([buildInstance.deployKey]) {
+        //             sh "ssh ${buildInstance.sshString} '([ -f ${buildInstance.postDeployFolder}/post-deploy.sh ] && ${buildInstance.postDeployFolder}/post-deploy.sh)'"
+        //         }
+        //     }
+        // }
     }
 }
