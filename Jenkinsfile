@@ -1,15 +1,20 @@
+// NOT TO BE USED WITH REACT
+// Jenkinsfile HLRMNP - To be used only with node based projects
+// v1.0
+
 def defaults = [
     "deployUser"    : "deploy",
-    "deployKeys"    : ['deploy_2018_production', 'deploy_2018_staging'],
-    "releasesToKeep": 5,
+    "releasesToKeep": 5
 ]
 
 def environments = [
     "staging": [
-        "deployServer": "193.200.242.59"
+        "deployServer"  : "193.200.242.59",
+        "deployKey"     : "deploy_2018_production",
     ],
     "master": [
-        "deployServer": "193.200.242.58"
+        "deployServer"  : "193.200.242.58",
+        "deployKey"     : "deploy_2018_production"
     ]
 ]
 
@@ -21,6 +26,7 @@ def getBuildInstance(variables, environments) {
         print "Setting up instance variables"
 
         String repoName             = scm.getUserRemoteConfigs()[0].getUrl().tokenize('/').last().split("\\.")[0]
+        String deployServer         = environments[deploy_branch]['deployServer']
         String homePath             = "/home/${variables.deployUser}"
         String deployPathBase       = "${homePath}/apps/${repoName}"
         String deployableBuildName  = sh(returnStdout: true, script: 'date "+%Y-%m-%d_%H-%M-%S"').trim()
@@ -31,7 +37,9 @@ def getBuildInstance(variables, environments) {
         def computedVars = [
             "repoName"                      : repoName,
             "homePath"                      : homePath,
-            "deployServer"                  : environments[env.BRANCH_NAME]['deployServer'],
+            "deployServer"                  : deployServer,
+            "sshString"                     : "${variables.deployUser}@${deployServer}",
+            "deployKey"                     : environments[deploy_branch]['deployKey'],
             "deployableBuildName"           : deployableBuildName,
             "deployPathBase"                : deployPathBase,
             "deployPathReleases"            : deployPathReleases,
@@ -40,8 +48,10 @@ def getBuildInstance(variables, environments) {
             "deployPathShared"              : "${deployPathBase}/shared",
             "compressedWorspacePath"        : "${env.WORKSPACE_TMP}/${deployableBuildName}.tar.gz",
             "deployedCompressedWorspacePath": "${deployedReleasePath}/${deployableBuildName}.tar.gz",
-            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${env.BRANCH_NAME}.json",
-            "wasTriggeredByUser"            : currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user')
+            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${deploy_branch}.json",
+            "wasTriggeredByUser"            : currentBuild.getBuildCauses()[0].shortDescription.startsWith('Started by user'),
+            "postDeployFolder"              : "${deployedReleasePath}/deploy",
+            "nodeCurrentPath"               : "/home/${variables.deployUser}/.nvm/current/bin/"
 
         ]
         variables = variables << computedVars
@@ -56,6 +66,9 @@ def buildInstance // Global variable declaration
 
 pipeline {
     agent any
+    parameters {
+        string(name: 'deploy_branch', defaultValue: env.BRANCH_NAME, description: '')
+    }
     stages {
         stage('Build') {
             steps {
@@ -74,34 +87,44 @@ pipeline {
         }
         stage('Deploy') {
             when {
-                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
             }
             steps {
                 script {
-                    sshagent(buildInstance.deployKeys) {
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
-                        sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.deployUser}@${buildInstance.deployServer}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} tar xzvf ${buildInstance.deployedCompressedWorspacePath} -C ${buildInstance.deployedReleasePath}" // extract the build into the releases folder
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} rm -f ${buildInstance.deployPathBase}/last_release" // remove the last_release reference before making a new one
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} mv ${buildInstance.deployPathCurrent} ${buildInstance.deployPathBase}/last_release" // keep a reference of the last release (fail silently)
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} ln -s ${buildInstance.deployedReleasePath} ${buildInstance.deployPathCurrent}" // make the last deployed release the current one
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} ln -s ${buildInstance.deployPathShared}/logs ${buildInstance.deployedReleasePath}" // create logs link into the newest release
-                        sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(ls -d ${buildInstance.deployPathReleases}/*|head -n -${buildInstance.releasesToKeep})|xargs --no-run-if-empty rm -rf'" // remove old releases
+                    sshagent([buildInstance.deployKey]) {
+                        sh "ssh ${buildInstance.sshString} mkdir -p ${buildInstance.deployedReleasePath} ${buildInstance.deployPathShared}/logs" // create folders if needed
+                        sh "ssh ${buildInstance.sshString} '([ ! -f ${buildInstance.deployPathCurrent} ] && touch ${buildInstance.deployPathCurrent})'" // shitty workaround to avoid errors on first deploy
+                        sh "scp ${buildInstance.compressedWorspacePath} ${buildInstance.sshString}:${buildInstance.deployedReleasePath}" // copy the compressed buid into the deploy server
+                        sh "ssh ${buildInstance.sshString} tar xzvf ${buildInstance.deployedCompressedWorspacePath} -C ${buildInstance.deployedReleasePath}" // extract the build into the releases folder
+                        sh "ssh ${buildInstance.sshString} rm -f ${buildInstance.deployPathBase}/last_release" // remove the last_release reference before making a new one
+                        sh "ssh ${buildInstance.sshString} mv ${buildInstance.deployPathCurrent} ${buildInstance.deployPathBase}/last_release" // keep a reference of the last release (fail silently)
+                        sh "ssh ${buildInstance.sshString} ln -s ${buildInstance.deployedReleasePath} ${buildInstance.deployPathCurrent}" // make the last deployed release the current one
+                        sh "ssh ${buildInstance.sshString} ln -s ${buildInstance.deployPathShared}/logs ${buildInstance.deployedReleasePath}" // create logs link into the newest release
+                        sh "ssh ${buildInstance.sshString} '(ls -d ${buildInstance.deployPathReleases}/*|head -n -${buildInstance.releasesToKeep})|xargs --no-run-if-empty rm -rf'" // remove old releases
                     }
                 }
             }
         }
         stage('Restart') {
             when {
-                expression { buildInstance.wasTriggeredByUser || env.BRANCH_NAME != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
             }
             steps {
-                sshagent(buildInstance.deployKeys) {
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && pm2 delete ${buildInstance.deployedPm2FilePath})'"
-                    sh "ssh ${buildInstance.deployUser}@${buildInstance.deployServer} '(export PATH=\$PATH:/home/deploy/.nvm/current/bin/ && cd ${buildInstance.deployedReleasePath} && pm2 start ${buildInstance.deployedPm2FilePath})'"
+                sshagent([buildInstance.deployKey]) {
+                    sh "ssh ${buildInstance.sshString} '(export PATH=\$PATH:${buildInstance.nodeCurrentPath} && pm2 delete ${buildInstance.deployedPm2FilePath})'"
+                    sh "ssh ${buildInstance.sshString} '(export PATH=\$PATH:${buildInstance.nodeCurrentPath} && cd ${buildInstance.deployedReleasePath} && pm2 start ${buildInstance.deployedPm2FilePath})'"
                 }
             }
         }
+        // stage('Post-deploy') { // Uncomment once needed
+        //     when {
+        //         expression { buildInstance.wasTriggeredByUser || deploy_branch != 'master' }
+        //     }
+        //     steps {
+        //         sshagent([buildInstance.deployKey]) {
+        //             sh "ssh ${buildInstance.sshString} '([ -f ${buildInstance.postDeployFolder}/post-deploy.sh ] && ${buildInstance.postDeployFolder}/post-deploy.sh)'"
+        //         }
+        //     }
+        // }
     }
 }
