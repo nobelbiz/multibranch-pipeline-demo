@@ -69,22 +69,10 @@ def buildInstance // Global variable declaration
 
 pipeline {
     agent any
-    options {
-        skipDefaultCheckout()
-    }
     parameters {
         string(name: 'deployBranch', defaultValue: env.BRANCH_NAME, description: '')
     }
     stages {
-        stage('Pulling code') {
-            steps {
-                checkout([
-                  $class: 'GitSCM',
-                  branches: [[name: params.deployBranch]],
-                  userRemoteConfigs: scm.userRemoteConfigs
-                ])
-            }
-        }
         stage('Build') {
             steps {
                 script {
@@ -102,7 +90,7 @@ pipeline {
         }
         stage('Deploy') {
             when {
-                expression { buildInstance.wasTriggeredByUser || deployBranch != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' }
             }
             steps {
                 script {
@@ -122,7 +110,7 @@ pipeline {
         }
         stage('Restart') {
             when {
-                expression { buildInstance.wasTriggeredByUser || deployBranch != 'master' }
+                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' }
             }
             steps {
                 sshagent([buildInstance.deployKey]) {
@@ -133,7 +121,7 @@ pipeline {
         }
         // stage('Post-deploy') { // Uncomment once needed
         //     when {
-        //         expression { buildInstance.wasTriggeredByUser || deployBranch != 'master' }
+        //         expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' }
         //     }
         //     steps {
         //         sshagent([buildInstance.deployKey]) {
