@@ -1,6 +1,6 @@
 // NOT TO BE USED WITH REACT
 // Jenkinsfile HLRMNP - To be used only with node based projects
-// v1.1
+// v1.1.3
 
 def defaults = [
     "deployUser"    : "deploy",
@@ -51,7 +51,7 @@ def getBuildInstance(variables, environments, deployBranch) {
             "deployPathShared"              : "${deployPathBase}/shared",
             "compressedWorspacePath"        : "${env.WORKSPACE_TMP}/${deployableBuildName}.tar.gz",
             "deployedCompressedWorspacePath": "${deployedReleasePath}/${deployableBuildName}.tar.gz",
-            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${deployBranch}.json",
+            "deployedPm2FilePath"           : "${deployedReleasePath}/pm2.${deployEnv}.json",
             "wasTriggeredByUser"            : buildTrigger.startsWith('Started by user') || buildTrigger.startsWith('Started by upstream'),
             "postDeployFolder"              : "${deployedReleasePath}/deploy",
             "nodeCurrentPath"               : "/home/${variables.deployUser}/.nvm/current/bin/"
@@ -69,10 +69,22 @@ def buildInstance // Global variable declaration
 
 pipeline {
     agent any
+    options {
+        skipDefaultCheckout()
+    }
     parameters {
         string(name: 'deployBranch', defaultValue: env.BRANCH_NAME, description: '')
     }
     stages {
+        stage('Pulling code') {
+            steps {
+                checkout([
+                  $class: 'GitSCM',
+                  branches: [[name: params.deployBranch]],
+                  userRemoteConfigs: scm.userRemoteConfigs
+                ])
+            }
+        }
         stage('Build') {
             steps {
                 script {
