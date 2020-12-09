@@ -1,6 +1,6 @@
 // NOT TO BE USED WITH REACT
 // Jenkinsfile HLRMNP - To be used only with node based projects
-// v1.1.4
+// v1.1.3
 
 def defaults = [
     "deployUser"    : "deploy",
@@ -69,12 +69,8 @@ def buildInstance // Global variable declaration
 
 pipeline {
     agent any
-    options {
-        timeout(time: 10, unit: 'SECONDS')
-    }
     parameters {
         string(name: 'deployBranch', defaultValue: env.BRANCH_NAME, description: '')
-        booleanParam(name: 'forceDeploy', defaultValue: false, description: '')
     }
     stages {
         stage('Build') {
@@ -94,7 +90,7 @@ pipeline {
         }
         stage('Deploy') {
             when {
-                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' || forceDeploy }
+                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' }
             }
             steps {
                 script {
@@ -114,7 +110,7 @@ pipeline {
         }
         stage('Restart') {
             when {
-                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' || forceDeploy }
+                expression { buildInstance.wasTriggeredByUser || deployBranch == 'staging' }
             }
             steps {
                 sshagent([buildInstance.deployKey]) {
